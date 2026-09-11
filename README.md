@@ -1,83 +1,86 @@
 # cmd-undo
 
-A lightweight, zero-dependency CLI tool to log your last 10 shell commands and suggest inverse operations.
+A lightweight Python CLI tool that logs executed shell commands to a local JSON file and provides an 'undo' command that suggests or executes the inverse operation for common commands.
 
 [![CI](https://github.com/cypherkeolis/cmd-undo/actions/workflows/ci.yml/badge.svg)](https://github.com/cypherkeolis/cmd-undo/actions)
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/cypherkeolis/cmd-undo/releases)
+[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](https://github.com/cypherkeolis/cmd-undo/releases)
 
 ## Description
 
-`cmd-undo` is a minimal utility designed to help developers keep track of recent shell activities. It stores the last 10 executed commands in a local JSON file and provides a simple interface to review this history. Additionally, it offers an "undo" feature that uses pattern matching to suggest inverse operations for common commands (e.g., suggesting `rmdir` for `mkdir` or `git reset` for `git commit`).
-
-The tool relies entirely on the Python standard library, ensuring it runs anywhere Python is available without requiring `pip install` for third-party packages.
+`cmd-undo` acts as a safety net for your terminal sessions. It tracks a history of commands you execute and allows you to "undo" the last action by mapping common destructive or state-changing commands to their logical inverses. It relies entirely on the Python standard library, making it easy to install and audit.
 
 ## Features
 
-- **Local History Logging**: Automatically maintains a rolling log of the last 10 commands.
-- **Inverse Command Suggestions**: Provides helpful counter-commands for common operations like `mkdir`, `rm`, `git commit`, and `git push`.
-- **Zero Dependencies**: Uses only Python standard libraries (`json`, `os`, `sys`, `re`, `datetime`).
-- **Lightweight**: Single-file implementation with no external configuration required.
-- **JSON Storage**: History is stored in a human-readable `command_history.json` file.
+- **Command Logging**: Automatically appends executed commands to a local `command_log.json` file.
+- **Inverse Detection**: Maps common commands to their reverses:
+  - `rm` → `git checkout --`
+  - `mkdir` → `rmdir`
+  - `cp` → `mv` (move destination back to source)
+  - `mv` → `mv` (swap source and destination)
+  - `touch` → `rm`
+- **Safe Execution**: Uses `subprocess` to execute inverse commands with error handling.
+- **Zero Dependencies**: Built using only the Python standard library (`json`, `os`, `subprocess`, `sys`).
 
 ## Installation
 
-No installation is required. You can run the tool directly from the source code using Python 3.
+Since this project uses only the standard library, you only need Python 3.6+ installed.
 
 ```bash
-# Clone the repository
 git clone https://github.com/cypherkeolis/cmd-undo.git
 cd cmd-undo
 ```
 
 ## Usage
 
-The tool accepts three main subcommands: `log`, `list`, and `undo`.
-
-### 1. Log a Command
-Record a command to the history. This is typically done by aliasing or wrapping your shell prompt, but can also be used manually.
+Run the main script to see the logging and undo logic in action:
 
 ```bash
-python3 main.py log "mkdir my_project"
-# Output: Logged: mkdir my_project
+python main.py
 ```
 
-### 2. List Recent History
-Display the last 10 logged commands with their timestamps.
-
-```bash
-python3 main.py list
-# Output:
-# 1. [2023-10-27T10:00:00] mkdir my_project
-# 2. [2023-10-27T10:01:00] cd my_project
-# 3. [2023-10-27T10:02:00] git init
-```
-
-### 3. Suggest Undo
-Check the last logged command and suggest an inverse operation if one is known.
-
-```bash
-python3 main.py undo
-# Output:
-# Last command: mkdir my_project
-# Suggested inverse: rmdir
-```
-
-If no inverse is known for the last command, the tool will simply state that no suggestion is available.
+The script will:
+1. Log a sequence of sample commands (`mkdir`, `touch`, `rm`).
+2. Identify the inverse of the last command (`rm` → `git checkout`).
+3. Execute the inverse command.
+4. Print the remaining logged commands.
 
 ## Running the Tests
 
 The project includes a comprehensive test suite using `pytest`. To run the tests:
 
-1. Ensure `pytest` is installed:
+1. Install pytest if you haven't already:
    ```bash
    pip install pytest
    ```
 
-2. Run the test suite:
+2. Run the tests:
    ```bash
-   python -m pytest
+   pytest
    ```
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
+
+```
+MIT License
+
+Copyright (c) 2024 Cypher Keolis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,100 +1,73 @@
 import json
 import os
+import subprocess
 import sys
-import re
-from datetime import datetime
 
-HISTORY_FILE = 'command_history.json'
-MAX_HISTORY = 10
+LOG_FILE = "command_log.json"
 
-INVERSE_MAP = {
-    'mkdir': 'rmdir',
-    'rm': 'touch',
-    'touch': 'rm',
-    'git commit': 'git reset --soft HEAD~1',
-    'git push': 'git push --delete',
-    'git checkout': 'git checkout',
-    'cd': 'cd',
-}
-
-
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, 'r') as f:
+def load_log():
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'r') as f:
             return json.load(f)
     return []
 
+def save_log(log):
+    with open(LOG_FILE, 'w') as f:
+        json.dump(log, f, indent=2)
 
-def save_history(history):
-    with open(HISTORY_FILE, 'w') as f:
-        json.dump(history, f, indent=2)
+def log_command(cmd):
+    log = load_log()
+    log.append({"command": cmd})
+    save_log(log)
+    return cmd
 
-
-def add_command(cmd):
-    history = load_history()
-    entry = {'command': cmd, 'timestamp': datetime.now().isoformat()}
-    history.append(entry)
-    if len(history) > MAX_HISTORY:
-        history = history[-MAX_HISTORY:]
-    save_history(history)
-    return history
-
-
-def get_last_n(n=10):
-    history = load_history()
-    return history[-n:]
-
-
-def suggest_inverse(cmd):
-    cmd_lower = cmd.lower().strip()
-    for pattern, inverse in INVERSE_MAP.items():
-        if cmd_lower.startswith(pattern):
-            return inverse
+def get_inverse(cmd):
+    parts = cmd.split()
+    if not parts:
+        return None
+    base = parts[0]
+    if base == 'rm':
+        return f"git checkout -- {' '.join(parts[1:])}"
+    elif base == 'mkdir':
+        return f"rmdir {' '.join(parts[1:])}"
+    elif base == 'cp':
+        if len(parts) >= 3:
+            src, dst = parts[1], parts[2]
+            return f"mv {dst} {src}"
+    elif base == 'mv':
+        if len(parts) >= 3:
+            src, dst = parts[1], parts[2]
+            return f"mv {dst} {src}"
+    elif base == 'touch':
+        return f"rm {' '.join(parts[1:])}"
     return None
 
-
-def list_commands(n=10):
-    history = get_last_n(n)
-    if not history:
-        return 'No commands in history.'
-    lines = []
-    for i, entry in enumerate(history, 1):
-        lines.append(f"{i}. [{entry['timestamp']}] {entry['command']}")
-    return '\n'.join(lines)
-
-
 def undo_last():
-    history = get_last_n(1)
-    if not history:
-        return 'No commands to undo.'
-    last_cmd = history[-1]['command']
-    inverse = suggest_inverse(last_cmd)
+    log = load_log()
+    if not log:
+        return None
+    last_cmd = log[-1]["command"]
+    inverse = get_inverse(last_cmd)
     if inverse:
-        return f"Last command: {last_cmd}\nSuggested inverse: {inverse}"
-    return f"Last command: {last_cmd}\nNo inverse suggestion available."
+        log.pop()
+        save_log(log)
+        return inverse
+    return None
 
-
-def main():
-    if len(sys.argv) > 1:
-        cmd = sys.argv[1]
-        if cmd == 'list':
-            print(list_commands())
-        elif cmd == 'undo':
-            print(undo_last())
-        elif cmd == 'log':
-            if len(sys.argv) > 2:
-                logged_cmd = ' '.join(sys.argv[2:])
-                add_command(logged_cmd)
-                print(f"Logged: {logged_cmd}")
-            else:
-                print("Usage: python3 main.py log <command>")
-        else:
-            print("Unknown command. Use: list, undo, log")
-    else:
-        print("Usage: python3 main.py [list|undo|log <command>]")
-        print("Default: showing recent history")
-        print(list_commands())
-
+def run_command(cmd):
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
 
 if __name__ == '__main__':
-    main()
+    log_command("mkdir test_dir")
+    log_command("touch test_dir/file.txt")
+    log_command("rm test_dir/file.txt")
+    inverse = undo_last()
+    if inverse:
+        print(f"Undo: {inverse}")
+        run_command(inverse)
+    log = load_log()
+    print(f"Commands logged: {len(log)}")
