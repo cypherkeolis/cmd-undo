@@ -1,8 +1,0 @@
-[
-  {
-    "command": "mkdir test_dir"
-  },
-  {
-    "command": "touch test_dir/file.txt"
-  }
-]

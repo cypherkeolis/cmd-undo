@@ -1,73 +1,99 @@
 import json
 import os
-import subprocess
 import sys
+import time
+from datetime import datetime
 
-LOG_FILE = "command_log.json"
+HISTORY_FILE = "command_history.json"
+MAX_ENTRIES = 5
 
-def load_log():
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r') as f:
-            return json.load(f)
-    return []
-
-def save_log(log):
-    with open(LOG_FILE, 'w') as f:
-        json.dump(log, f, indent=2)
-
-def log_command(cmd):
-    log = load_log()
-    log.append({"command": cmd})
-    save_log(log)
-    return cmd
-
-def get_inverse(cmd):
-    parts = cmd.split()
-    if not parts:
-        return None
-    base = parts[0]
-    if base == 'rm':
-        return f"git checkout -- {' '.join(parts[1:])}"
-    elif base == 'mkdir':
-        return f"rmdir {' '.join(parts[1:])}"
-    elif base == 'cp':
-        if len(parts) >= 3:
-            src, dst = parts[1], parts[2]
-            return f"mv {dst} {src}"
-    elif base == 'mv':
-        if len(parts) >= 3:
-            src, dst = parts[1], parts[2]
-            return f"mv {dst} {src}"
-    elif base == 'touch':
-        return f"rm {' '.join(parts[1:])}"
-    return None
-
-def undo_last():
-    log = load_log()
-    if not log:
-        return None
-    last_cmd = log[-1]["command"]
-    inverse = get_inverse(last_cmd)
-    if inverse:
-        log.pop()
-        save_log(log)
-        return inverse
-    return None
-
-def run_command(cmd):
+def load_history():
+    if not os.path.exists(HISTORY_FILE):
+        return []
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        return result.returncode == 0
-    except Exception:
-        return False
+        with open(HISTORY_FILE, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+    except (json.JSONDecodeError, IOError):
+        return []
 
-if __name__ == '__main__':
-    log_command("mkdir test_dir")
-    log_command("touch test_dir/file.txt")
-    log_command("rm test_dir/file.txt")
-    inverse = undo_last()
-    if inverse:
-        print(f"Undo: {inverse}")
-        run_command(inverse)
-    log = load_log()
-    print(f"Commands logged: {len(log)}")
+def save_history(history):
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+def add_command(command, exit_code=0):
+    history = load_history()
+    entry = {
+        "command": command,
+        "exit_code": exit_code,
+        "timestamp": datetime.now().isoformat()
+    }
+    history.append(entry)
+    if len(history) > MAX_ENTRIES:
+        history = history[-MAX_ENTRIES:]
+    save_history(history)
+    return entry
+
+def get_recent_history(n=MAX_ENTRIES):
+    history = load_history()
+    return history[-n:]
+
+def get_command_by_index(index):
+    history = load_history()
+    if 0 <= index < len(history):
+        return history[index]
+    return None
+
+def list_commands():
+    history = get_recent_history()
+    if not history:
+        print("No commands recorded.")
+        return
+    for i, entry in enumerate(history):
+        print(f"[{i}] {entry['timestamp']} | exit={entry['exit_code']} | {entry['command']}")
+
+def replay_command(index):
+    entry = get_command_by_index(index)
+    if entry is None:
+        print(f"Invalid index: {index}")
+        return
+    print(entry["command"])
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        list_commands()
+        return
+    cmd = args[0]
+    if cmd == "list":
+        list_commands()
+    elif cmd == "replay":
+        if len(args) < 2:
+            print("Usage: python3 main.py replay <index>")
+            return
+        try:
+            index = int(args[1])
+        except ValueError:
+            print("Index must be an integer.")
+            return
+        replay_command(index)
+    elif cmd == "add":
+        if len(args) < 2:
+            print("Usage: python3 main.py add <command> [exit_code]")
+            return
+        command = args[1]
+        exit_code = 0
+        if len(args) >= 3:
+            try:
+                exit_code = int(args[2])
+            except ValueError:
+                exit_code = 0
+        add_command(command, exit_code)
+        print("Command recorded.")
+    else:
+        print("Unknown command. Use: list, replay, add")
+
+if __name__ == "__main__":
+    main()

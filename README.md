@@ -1,86 +1,78 @@
 # cmd-undo
 
-A lightweight Python CLI tool that logs executed shell commands to a local JSON file and provides an 'undo' command that suggests or executes the inverse operation for common commands.
+A lightweight, offline Python CLI tool for logging and replaying your last 5 shell commands.
 
 [![CI](https://github.com/cypherkeolis/cmd-undo/actions/workflows/ci.yml/badge.svg)](https://github.com/cypherkeolis/cmd-undo/actions)
-[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](https://github.com/cypherkeolis/cmd-undo/releases)
+[![Version](https://img.shields.io/badge/version-1.0.4-blue.svg)](https://github.com/cypherkeolis/cmd-undo/releases)
 
 ## Description
 
-`cmd-undo` acts as a safety net for your terminal sessions. It tracks a history of commands you execute and allows you to "undo" the last action by mapping common destructive or state-changing commands to their logical inverses. It relies entirely on the Python standard library, making it easy to install and audit.
+`cmd-undo` provides a simple "undo" mechanism for terminal mistakes without requiring complex shell integration or external dependencies. It logs the last 5 executed commands, along with their exit codes and timestamps, to a local JSON file. You can view this history or retrieve the exact command string for any entry to copy-paste and re-execute.
 
 ## Features
 
-- **Command Logging**: Automatically appends executed commands to a local `command_log.json` file.
-- **Inverse Detection**: Maps common commands to their reverses:
-  - `rm` → `git checkout --`
-  - `mkdir` → `rmdir`
-  - `cp` → `mv` (move destination back to source)
-  - `mv` → `mv` (swap source and destination)
-  - `touch` → `rm`
-- **Safe Execution**: Uses `subprocess` to execute inverse commands with error handling.
-- **Zero Dependencies**: Built using only the Python standard library (`json`, `os`, `subprocess`, `sys`).
+- **Lightweight**: Pure Python standard library implementation. No external dependencies.
+- **Local Storage**: Stores history in a local `command_history.json` file.
+- **Limited History**: Automatically retains only the last 5 commands to keep the file small.
+- **Metadata Tracking**: Records the command string, exit code, and ISO 8601 timestamp.
+- **Replay Capability**: Retrieve the exact command string by index for easy copy-pasting.
+- **Offline**: Works entirely locally; no network calls or cloud services required.
 
 ## Installation
 
-Since this project uses only the standard library, you only need Python 3.6+ installed.
+No installation is required. You can run the script directly using Python 3.
 
 ```bash
+# Clone the repository
 git clone https://github.com/cypherkeolis/cmd-undo.git
 cd cmd-undo
 ```
 
 ## Usage
 
-Run the main script to see the logging and undo logic in action:
+The tool supports three main commands: `add`, `list`, and `replay`.
+
+### 1. Add a Command
+Log a command to the history. You can optionally specify the exit code.
 
 ```bash
-python main.py
+python3 main.py add "ls -la" 0
+python3 main.py add "git commit -m 'fix'" 1
 ```
 
-The script will:
-1. Log a sequence of sample commands (`mkdir`, `touch`, `rm`).
-2. Identify the inverse of the last command (`rm` → `git checkout`).
-3. Execute the inverse command.
-4. Print the remaining logged commands.
+### 2. List Recent History
+View the last 5 recorded commands with their indices, timestamps, and exit codes.
+
+```bash
+python3 main.py list
+# Output:
+# [0] 2023-10-27T10:00:00 | exit=0 | ls -la
+# [1] 2023-10-27T10:01:00 | exit=1 | git commit -m 'fix'
+```
+
+### 3. Replay a Command
+Print the exact command string for a specific index. This allows you to copy-paste the command back into your terminal.
+
+```bash
+python3 main.py replay 0
+# Output:
+# ls -la
+```
 
 ## Running the Tests
 
-The project includes a comprehensive test suite using `pytest`. To run the tests:
+The project includes a test suite using `pytest`. To run the tests:
 
-1. Install pytest if you haven't already:
+1. Ensure `pytest` is installed:
    ```bash
    pip install pytest
    ```
 
 2. Run the tests:
    ```bash
-   pytest
+   python -m pytest
    ```
 
 ## License
 
-This project is licensed under the MIT License.
-
-```
-MIT License
-
-Copyright (c) 2024 Cypher Keolis
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
