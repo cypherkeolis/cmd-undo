@@ -1,110 +1,91 @@
 # cmd-undo
 
-A lightweight command-line history manager that logs executed shell commands to a local JSON file.
+Lightweight command-line utility to log, search, and "undo" recent shell commands.
 
 [![CI](https://github.com/cypherkeolis/cmd-undo/actions/workflows/ci.yml/badge.svg)](https://github.com/cypherkeolis/cmd-undo/actions)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/cypherkeolis/cmd-undo/releases)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/cypherkeolis/cmd-undo/releases)
 
-## Description
-
-`cmd-undo` is a minimal utility designed to track your shell command history. Unlike standard shell history which is often limited to simple text lines, `cmd-undo` stores structured data including timestamps. It provides a safety net by analyzing the last executed command to suggest a safe reverse operation (e.g., converting `mv a b` to `mv b a`) or issuing a warning for destructive commands like `rm`.
+`cmd-undo` is a zero-dependency Python tool that tracks your last 50 executed shell commands, storing them in a local JSONL file with timestamps and exit codes. It provides a simple CLI to review history, search for specific commands, and suggest inverse operations for common destructive commands like `rm` or `mv`.
 
 ## Features
 
-- **JSON Logging**: Stores command history in a human-readable `command_history.json` file.
-- **Safe Undo**: Analyzes the last command to generate a reverse operation or a safety warning.
-  - `mv a b` → `mv b a`
-  - `mkdir dir` → `rmdir dir`
-  - `rm file` → `WARNING: Cannot undo 'rm'...`
-- **Keyword Search**: Quickly find previous commands by keyword.
-- **Zero Dependencies**: Built entirely with the Python standard library.
+- **Local History Logging**: Stores the last 50 commands in `.cmd_history.jsonl` (JSON Lines format).
+- **Zero Dependencies**: Uses only the Python standard library (`json`, `os`, `subprocess`, `argparse`, `datetime`, `shlex`).
+- **Command Search**: Quickly find past commands by keyword.
+- **Undo Suggestions**:
+  - Suggests `git checkout -- <file>` for `rm` commands if inside a Git repository.
+  - Suggests `mv <dst> <src>` for `mv` commands.
+  - Suggests `rm <dst>` for `cp` commands.
+  - Warns if a command is not recoverable.
+- **No Network Access**: All operations are local and offline.
 
-## Installation and Usage
+## Installation
 
-### Installation
-
-No installation is required. Simply clone the repository and run the script directly with Python.
+No installation required. The tool is a single Python script.
 
 ```bash
+# Clone the repository
 git clone https://github.com/cypherkeolis/cmd-undo.git
 cd cmd-undo
 ```
 
-### Usage
+## Usage
 
-Run the main script to view the history, the last 5 commands, the suggested undo operation for the last command, and a search example:
+### Log a Command
+
+Log a command with its exit code:
 
 ```bash
-python main.py
+python main.py --log "rm file.txt" --exit-code 0
 ```
 
-**Sample Output:**
+### List Recent Commands
 
-```text
-Command History Manager
-========================================
-Total commands logged: 4
+List the last 10 commands (default):
 
-Last 5 commands:
-  [2024-01-01T10:00:00] rm old_file.txt
-  [2024-01-01T10:05:00] mv a.txt b.txt
-  [2024-01-01T10:10:00] mkdir new_dir
-  [2024-01-01T10:15:00] cp source.txt backup.txt
-
-Undo last command:
-  WARNING: Cannot safely undo 'cp'. Consider removing 'backup.txt' if no longer needed.
-
-Search for 'mv':
-  [2024-01-01T10:05:00] mv a.txt b.txt
+```bash
+python main.py --list
 ```
 
-You can also import the module to use its functions programmatically:
+List the last 5 commands:
 
-```python
-from main import log_command, undo_last_command, search_commands
-
-# Log a new command
-log_command("mv file1.txt file2.txt")
-
-# Get the reverse operation for the last command
-print(undo_last_command())  # Output: mv file2.txt file1.txt
-
-# Search for commands containing 'file'
-results = search_commands("file")
+```bash
+python main.py --list 5
 ```
+
+### Search History
+
+Search for commands containing a keyword:
+
+```bash
+python main.py --search "git"
+```
+
+### Suggest Undo
+
+Get an undo suggestion for a specific command:
+
+```bash
+python main.py --undo "rm file.txt"
+```
+
+Example outputs:
+- If in a Git repo: `git checkout -- file.txt`
+- If not in a Git repo: `Warning: 'rm file.txt' is not recoverable without backup.`
+- For `mv src dst`: `mv dst src`
 
 ## Running the Tests
 
-The project includes a test suite using `pytest`. To run the tests, ensure `pytest` is installed and execute:
+The project includes a test suite using `pytest`.
 
 ```bash
+# Install pytest if not already installed
 pip install pytest
+
+# Run tests
 pytest
 ```
 
 ## License
 
-This project is licensed under the MIT License.
-
-```
-MIT License
-
-Copyright (c) 2024 cypherkeolis
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

@@ -1,144 +1,146 @@
-import pytest
-import os
 import json
+import os
 import tempfile
-from unittest.mock import patch
+import pytest
+import subprocess
 from datetime import datetime
-
-from main import (
-    load_history,
-    save_history,
-    log_command,
-    get_reverse_operation,
-    undo_last_command,
-    search_commands,
-    HISTORY_FILE,
-)
+import main
 
 
-class TestLoadHistory:
-    def test_returns_empty_list_when_file_does_not_exist(self, tmp_path):
-        path = str(tmp_path / "nonexistent.json")
-        assert load_history(path) == []
-
-    def test_returns_list_when_file_exists(self, tmp_path):
-        data = [{"command": "ls", "timestamp": "2024-01-01T00:00:00"}]
-        path = str(tmp_path / "hist.json")
-        with open(path, "w") as f:
-            json.dump(data, f)
-        result = load_history(path)
-        assert result == data
+def test_load_history_no_file():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "nonexistent.jsonl")
+        assert main.load_history(path) == []
 
 
-class TestSaveHistory:
-    def test_saves_history_to_file(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        data = [{"command": "ls", "timestamp": "2024-01-01T00:00:00"}]
-        save_history(data, path)
-        with open(path, "r") as f:
-            loaded = json.load(f)
-        assert loaded == data
-
-
-class TestLogCommand:
-    def test_appends_command_to_history(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        history = log_command("ls -la", path=path)
-        assert len(history) == 1
-        assert history[0]["command"] == "ls -la"
-        assert "timestamp" in history[0]
-
-    def test_appends_to_existing_history(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        initial = [{"command": "pwd", "timestamp": "2024-01-01T00:00:00"}]
-        history = log_command("ls", history=initial, path=path)
-        assert len(history) == 2
-        assert history[0]["command"] == "pwd"
-        assert history[1]["command"] == "ls"
-
-
-class TestGetReverseOperation:
-    def test_rm_returns_warning(self):
-        result = get_reverse_operation("rm file.txt")
-        assert "WARNING" in result
-        assert "rm" in result
-
-    def test_mv_returns_reversed(self):
-        result = get_reverse_operation("mv a.txt b.txt")
-        assert result == "mv b.txt a.txt"
-
-    def test_mv_with_multiple_args(self):
-        result = get_reverse_operation("mv src.txt dst.txt")
-        assert result == "mv dst.txt src.txt"
-
-    def test_cp_returns_warning(self):
-        result = get_reverse_operation("cp source.txt backup.txt")
-        assert "WARNING" in result
-        assert "cp" in result
-
-    def test_mkdir_returns_rmdir(self):
-        result = get_reverse_operation("mkdir new_dir")
-        assert result == "rmdir new_dir"
-
-    def test_touch_returns_rm(self):
-        result = get_reverse_operation("touch file.txt")
-        assert result == "rm file.txt"
-
-    def test_unknown_command_returns_warning(self):
-        result = get_reverse_operation("echo hello")
-        assert "WARNING" in result
-        assert "echo" in result
-
-    def test_empty_command(self):
-        result = get_reverse_operation("")
-        assert "Cannot determine" in result
-
-
-class TestUndoLastCommand:
-    def test_returns_warning_for_rm(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        history = [{"command": "rm old.txt", "timestamp": "2024-01-01T00:00:00"}]
-        result = undo_last_command(history=history, path=path)
-        assert "WARNING" in result
-
-    def test_returns_reversed_mv(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        history = [{"command": "mv a.txt b.txt", "timestamp": "2024-01-01T00:00:00"}]
-        result = undo_last_command(history=history, path=path)
-        assert result == "mv b.txt a.txt"
-
-    def test_returns_message_when_history_empty(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        result = undo_last_command(history=[], path=path)
-        assert "No commands" in result
-
-
-class TestSearchCommands:
-    def test_finds_matching_commands(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        history = [
-            {"command": "mv a.txt b.txt", "timestamp": "2024-01-01T00:00:00"},
-            {"command": "ls -la", "timestamp": "2024-01-01T00:01:00"},
-            {"command": "mv c.txt d.txt", "timestamp": "2024-01-01T00:02:00"},
+def test_load_history_parses_jsonl():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        entries = [
+            {"timestamp": "2020-01-01T00:00:00", "command": "ls", "exit_code": 0},
+            {"timestamp": "2020-01-01T00:00:01", "command": "pwd", "exit_code": 0},
         ]
-        results = search_commands("mv", history=history, path=path)
+        with open(path, "w") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+        loaded = main.load_history(path)
+        assert len(loaded) == 2
+        assert loaded[0]["command"] == "ls"
+        assert loaded[1]["command"] == "pwd"
+
+
+def test_load_history_ignores_invalid_lines():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        with open(path, "w") as f:
+            f.write(json.dumps({"timestamp": "2020-01-01T00:00:00", "command": "ls", "exit_code": 0}) + "\n")
+            f.write("invalid json line\n")
+            f.write(json.dumps({"timestamp": "2020-01-01T00:00:01", "command": "pwd", "exit_code": 0}) + "\n")
+        loaded = main.load_history(path)
+        assert len(loaded) == 2
+
+
+def test_load_history_limits_to_max_entries():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        with open(path, "w") as f:
+            for i in range(60):
+                f.write(json.dumps({"timestamp": f"2020-01-01T00:00:{i:02d}", "command": f"cmd{i}", "exit_code": 0}) + "\n")
+        loaded = main.load_history(path)
+        assert len(loaded) == main.MAX_ENTRIES
+        assert loaded[0]["command"] == "cmd10"
+        assert loaded[-1]["command"] == "cmd59"
+
+
+def test_save_history_writes_jsonl():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        entries = [
+            {"timestamp": "2020-01-01T00:00:00", "command": "ls", "exit_code": 0},
+            {"timestamp": "2020-01-01T00:00:01", "command": "pwd", "exit_code": 0},
+        ]
+        main.save_history(entries, path)
+        with open(path, "r") as f:
+            lines = f.readlines()
+        assert len(lines) == 2
+        assert json.loads(lines[0])["command"] == "ls"
+        assert json.loads(lines[1])["command"] == "pwd"
+
+
+def test_save_history_limits_to_max_entries():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        entries = [{"timestamp": f"2020-01-01T00:00:{i:02d}", "command": f"cmd{i}", "exit_code": 0} for i in range(60)]
+        main.save_history(entries, path)
+        with open(path, "r") as f:
+            lines = f.readlines()
+        assert len(lines) == main.MAX_ENTRIES
+
+
+def test_log_command_appends_entry():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        entry = main.log_command("ls -la", 0, path)
+        assert entry["command"] == "ls -la"
+        assert entry["exit_code"] == 0
+        loaded = main.load_history(path)
+        assert len(loaded) == 1
+        assert loaded[0]["command"] == "ls -la"
+
+
+def test_list_recent_returns_last_n():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        for i in range(10):
+            main.log_command(f"cmd{i}", 0, path)
+        recent = main.list_recent(3, path)
+        assert len(recent) == 3
+        assert recent[0]["command"] == "cmd7"
+        assert recent[-1]["command"] == "cmd9"
+
+
+def test_search_history_finds_keyword():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "history.jsonl")
+        main.log_command("ls -la", 0, path)
+        main.log_command("cd /tmp", 0, path)
+        main.log_command("ls /var", 0, path)
+        results = main.search_history("ls", path)
         assert len(results) == 2
-        assert results[0]["command"] == "mv a.txt b.txt"
-        assert results[1]["command"] == "mv c.txt d.txt"
+        assert results[0]["command"] == "ls -la"
+        assert results[1]["command"] == "ls /var"
 
-    def test_case_insensitive_search(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        history = [{"command": "MV a.txt b.txt", "timestamp": "2024-01-01T00:00:00"}]
-        results = search_commands("mv", history=history, path=path)
-        assert len(results) == 1
 
-    def test_no_matches_returns_empty_list(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        history = [{"command": "ls", "timestamp": "2024-01-01T00:00:00"}]
-        results = search_commands("rm", history=history, path=path)
-        assert results == []
+def test_suggest_undo_rm_in_git_repo():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+        subprocess.run(["git", "init"], capture_output=True)
+        result = main.suggest_undo("rm file.txt")
+        assert result == "git checkout -- file.txt"
 
-    def test_empty_history_returns_empty_list(self, tmp_path):
-        path = str(tmp_path / "hist.json")
-        results = search_commands("mv", history=[], path=path)
-        assert results == []
+
+def test_suggest_undo_rm_not_in_git_repo():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+        result = main.suggest_undo("rm file.txt")
+        assert "Warning" in result
+
+
+def test_suggest_undo_mv():
+    result = main.suggest_undo("mv src.txt dst.txt")
+    assert result == "mv dst.txt src.txt"
+
+
+def test_suggest_undo_cp():
+    result = main.suggest_undo("cp src.txt dst.txt")
+    assert result == "rm dst.txt"
+
+
+def test_suggest_undo_unknown():
+    result = main.suggest_undo("echo hello")
+    assert "No inverse operation known" in result
+
+
+def test_suggest_undo_empty():
+    result = main.suggest_undo("")
+    assert "Cannot determine inverse" in result
